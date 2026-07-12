@@ -22,10 +22,10 @@ def main():
         answer = ""
         digits = []
         operators = []
-        print("введи выражение")
+        print("enter the expression")
         result = input("> ").strip()
         if result == "":
-            print("ошибка")
+            print("error")
             continue
         separation = result.split()
         for expression in separation:
@@ -34,7 +34,7 @@ def main():
             elif expression in ["+", "-", "*", "/"]:
                 operators.append(expression)
             else:
-                print("ты ввел какое то гавно")
+                print("you entered an invalid expression")
                 continue
 
         while operators:
@@ -56,7 +56,7 @@ def main():
             n1 = digits[op]
             n2 = digits[op + 1]
             if operators[op] == "/" and n2 == 0:
-                print("на ноль делить увы нельзя")
+                print("you cannot divide by zero")
                 break
             answer = operations[operators[op]](n1, n2)
             digits[op:op + 2] = [answer]
