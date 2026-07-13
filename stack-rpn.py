@@ -19,7 +19,40 @@ operations = {
     "/": divide
 }
 
+def user_help():
+    while True:
+        print("\nthis is a help page.")
+        print("what do you seek?")
+        print("1. an example and an explanation if i'm stuck.")
+        print("2. INFIX MODE")
+        print("3. exit")
+        answer = input("> ")
+        if answer in options:
+            options[answer]()
+        elif answer == "3":
+            return
+
+def example():
+    print("\nthis evaluator uses a notation called RPN - Reverse Polish Notation.")
+    print("soon you will be able to change MODE to INFIX. what is 'INFIX'? it is a traditional '2 + 2' notation method.")
+    print("so, how does RPN work? well, you can't just enter '2 + 2' here. you will get the 'this expression is logically incorrect' error.")
+    print("instead, you need to enter an expression in this notation: '2 2 +' it equals 4.")
+    print("more difficult expression: instead of '5 * 6 + 4', you need to enter '5 6 * 4 +'. both equals 34.")
+    print("hope you got the idea. press enter to return at the 'help' menu.")
+    input("> ")
+
+def infix():
+    print("\nWORK IN PROGRESS")
+    print("(press enter to forget what you just saw)")
+    input("> ")
+
+options = {
+    "1": example,
+    "2": infix,
+}
+
 def main():
+    print("enter 'help' to see available options")
     while True:
         try:
             digits_count = 0
@@ -27,6 +60,8 @@ def main():
             error_flag = False
             stack = []
             answer = input("> ")
+            if answer == "help":
+                user_help()
             if not answer or answer.strip() == "":
                 print("you didn't write anything")
                 continue
