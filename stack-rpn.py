@@ -1,3 +1,15 @@
+class EvaluationError(Exception):
+    pass
+
+class InvalidExpressionError(EvaluationError):
+    pass
+
+class OperatorError(EvaluationError):
+    pass
+
+class DivideByZeroError(EvaluationError):
+    pass
+
 def plus(a, b):
     return a+b
 
@@ -10,7 +22,7 @@ def multiply(a, b):
 def divide(a, b):
     if b != 0:
         return a/b
-    raise ValueError("ERROR: division by zero")
+    raise DivideByZeroError("ERROR: division by zero")
 
 operations = {
     "+": plus,
@@ -55,8 +67,6 @@ def main():
     print("enter 'help' to see available options")
     while True:
         try:
-            error_flag = False
-            stack = []
             answer = input("> ")
             if answer == "help":
                 user_help()
@@ -64,37 +74,30 @@ def main():
             if not answer or answer.strip() == "":
                 print("ERROR: empty input")
                 continue
-            separation = answer.split()
-            for token in separation:
-                if token.isdigit():
-                    stack.append(int(token))
-                else:
-                    if len(stack) > 1:
-                        second_number = stack.pop()
-                        first_number = stack.pop()
-                        if token in operations:
-                            temporary_result = operations[token](first_number, second_number)
-                            stack.append(temporary_result)
-                        else:
-                            print(f"ERROR: unknown operator '{token}'")
-                            print(stack)
-                            error_flag = True
-                            break
-                    else:
-                        print(f"ERROR: not enough operands for operand {token} (at least 2)")
-                        print(stack)
-                        error_flag = True
-                        break
-            if error_flag:
-                continue
-            elif not len(stack) == 1:
-                print(f"ERROR: expected one element in stack, got {len(stack)}")
-                print(stack)
-                continue
-            final_result = stack.pop()
-            print(f"your answer: {final_result}")
-        except ValueError as msg:
+            stack = evaluate(answer.split())
+            result = stack.pop()
+            print(f"your answer: {result}")
+        except EvaluationError as msg:
             print(msg)
-            continue
+
+def evaluate(tokens):
+    stack = []
+    for token in tokens:
+        if token.isdigit():
+            stack.append(int(token))
+        else:
+            if len(stack) > 1:
+                second_number = stack.pop()
+                first_number = stack.pop()
+                if token in operations:
+                    temporary_result = operations[token](first_number, second_number)
+                    stack.append(temporary_result)
+                else:
+                    raise OperatorError(f"ERROR: unknown operator '{token}'\n{stack}")
+            else:
+                raise EvaluationError(f"ERROR: not enough operands for operand {token} (at least 2)\n{stack}")
+    if not len(stack) == 1:
+        raise InvalidExpressionError(f"ERROR: expected one element in stack, got {len(stack)}\n{stack}")
+    return stack
 
 main()
