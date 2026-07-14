@@ -83,8 +83,9 @@ def main():
 def evaluate(tokens):
     stack = []
     for token in tokens:
-        if token.isdigit():
-            stack.append(int(token))
+        number = parse_number(token)
+        if number is not None:
+            stack.append(number)
         else:
             if len(stack) > 1:
                 second_number = stack.pop()
@@ -99,5 +100,14 @@ def evaluate(tokens):
     if not len(stack) == 1:
         raise InvalidExpressionError(f"ERROR: expected one element in stack, got {len(stack)}\n{stack}")
     return stack
+
+def parse_number(token):
+    try:
+        return int(token)
+    except ValueError:
+        try:
+            return float(token)
+        except ValueError:
+            return None
 
 main()
