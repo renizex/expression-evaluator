@@ -37,11 +37,12 @@ def user_help():
         print("what do you seek?")
         print("1. an example and an explanation if i'm stuck.")
         print("2. INFIX MODE")
-        print("3. exit")
+        print("3. commands")
+        print("4. exit")
         answer = input("> ")
-        if answer in options:
-            options[answer]()
-        elif answer == "3":
+        if answer in help_options:
+            help_options[answer]()
+        elif answer == "4":
             return
 
 def example():
@@ -58,56 +59,99 @@ def infix():
     print("(press enter to forget what you just saw)")
     input("> ")
 
-options = {
+def commands():
+    print("\nmemory - see your memory.")
+    print("clear - clear your memory.")
+    print("what is memory? a variable store. you can see all your variables in memory.")
+
+help_options = {
     "1": example,
     "2": infix,
+    "3": commands
 }
 
 def main():
-    print("enter 'help' to see available options")
+    memory = {}
+    print("RPN Calculator")
+    print("enter 'help' for commands")
     while True:
         try:
             answer = input("> ")
-            if answer == "help":
-                user_help()
+            if answer in main_options:
+                if answer in ["memory", "clear"]:
+                    main_options[answer](memory)
+                else:
+                    main_options[answer]()
                 continue
-            if not answer or answer.strip() == "":
+            if not answer or answer.strip() == '':
                 print("ERROR: empty input")
                 continue
-            stack = evaluate(answer.split())
+            previous_memory = memory.copy()
+            stack, memory = evaluate(answer.split(), memory)
+            if previous_memory != memory:
+                continue
             result = stack.pop()
             print(f"your answer: {result}")
         except EvaluationError as msg:
             print(msg)
 
-def evaluate(tokens):
+def show_memory(memory):
+    if memory:
+        for key, value in memory.items():
+            print(f"{key} = {value}")
+    else:
+        print("memory is empty")
+
+def clear_memory(memory):
+    memory.clear()
+    print("memory cleared")
+
+main_options = {
+    "memory": show_memory,
+    "clear": clear_memory,
+    "help": user_help
+}
+
+def evaluate(tokens, memory):
     stack = []
     for token in tokens:
-        number = parse_number(token)
-        if number is not None:
+        number, symbol_type = parse_number(token)
+        if symbol_type in ["integer", "float", "variable"]:
             stack.append(number)
         else:
             if len(stack) > 1:
                 second_number = stack.pop()
                 first_number = stack.pop()
-                if token in operations:
-                    temporary_result = operations[token](first_number, second_number)
-                    stack.append(temporary_result)
+                if token in ["+", "-", "*", "/", "="]:
+                    if token == '=':
+                        if not isinstance(first_number, str):
+                            raise InvalidExpressionError("ERROR: left side of assignment is not a variable")
+                        memory[first_number] = second_number
+                        return stack, memory
+                    else:
+                        if first_number in memory:
+                            first_number = memory[first_number]
+                        if second_number in memory:
+                            second_number = memory[second_number]
+                        temporary_result = operations[token](first_number, second_number)
+                        stack.append(temporary_result)
                 else:
                     raise OperatorError(f"ERROR: unknown operator '{token}'\n{stack}")
             else:
                 raise EvaluationError(f"ERROR: not enough operands for operand {token} (at least 2)\n{stack}")
     if not len(stack) == 1:
         raise InvalidExpressionError(f"ERROR: expected one element in stack, got {len(stack)}\n{stack}")
-    return stack
+    return stack, memory
 
 def parse_number(token):
     try:
-        return int(token)
+        return int(token), "integer"
     except ValueError:
         try:
-            return float(token)
+            return float(token), "float"
         except ValueError:
-            return None
+            if token in ["+", "-", "*", "/", "="]:
+                return str(token), "operator"
+            return str(token), "variable"
 
 main()
