@@ -10,6 +10,9 @@ class OperatorError(EvaluationError):
 class DivideByZeroError(EvaluationError):
     pass
 
+class InvalidVariableError(EvaluationError):
+    pass
+
 def plus(a, b):
     return a+b
 
@@ -44,6 +47,8 @@ def user_help():
             help_options[answer]()
         elif answer == "4":
             return
+        else:
+            print("unknown command")
 
 def example():
     print("\nthis evaluator uses a notation called RPN - Reverse Polish Notation.")
@@ -59,7 +64,7 @@ def infix():
     print("(press enter to forget what you just saw)")
     input("> ")
 
-def commands():
+def show_commands():
     print("\nmemory - see your memory.")
     print("clear - clear your memory.")
     print("what is memory? a variable store. you can see all your variables in memory.")
@@ -67,7 +72,7 @@ def commands():
 help_options = {
     "1": example,
     "2": infix,
-    "3": commands
+    "3": show_commands
 }
 
 def main():
@@ -83,7 +88,7 @@ def main():
                 else:
                     main_options[answer]()
                 continue
-            if not answer or answer.strip() == '':
+            if answer or answer.strip() != '':
                 print("ERROR: empty input")
                 continue
             previous_memory = memory.copy()
@@ -129,18 +134,24 @@ def evaluate(tokens, memory):
                         memory[first_number] = second_number
                         return stack, memory
                     else:
-                        if first_number in memory:
-                            first_number = memory[first_number]
-                        if second_number in memory:
-                            second_number = memory[second_number]
+                        if isinstance(first_number, str):
+                            if first_number in memory:
+                                first_number = memory[first_number]
+                            else:
+                                raise InvalidExpressionError("ERROR: left side of assignment is not a variable")
+                        if isinstance(second_number, str):
+                            if second_number in memory:
+                                second_number = memory[second_number]
+                            else:
+                                raise InvalidExpressionError("ERROR: left side of assignment is not a variable")
                         temporary_result = operations[token](first_number, second_number)
                         stack.append(temporary_result)
                 else:
-                    raise OperatorError(f"ERROR: unknown operator '{token}'\n{stack}")
+                    raise OperatorError(f"ERROR: unknown operator '{token}'\nif stuck, learn RPN in help -> explanation\nstack: {stack}")
             else:
-                raise EvaluationError(f"ERROR: not enough operands for operand {token} (at least 2)\n{stack}")
+                raise EvaluationError(f"ERROR: operator '{token}' requires two operands.\nif stuck, learn RPN in help -> explanation\nstack: {stack}")
     if not len(stack) == 1:
-        raise InvalidExpressionError(f"ERROR: expected one element in stack, got {len(stack)}\n{stack}")
+        raise InvalidExpressionError(f"ERROR: expected one element in stack, got {len(stack)}\nif stuck, learn RPN in help -> explanation\nstack: {stack}")
     return stack, memory
 
 def parse_number(token):
@@ -152,6 +163,16 @@ def parse_number(token):
         except ValueError:
             if token in ["+", "-", "*", "/", "="]:
                 return str(token), "operator"
-            return str(token), "variable"
+            if is_valid_variable(str(token)):
+                return token, "variable"
+            else:
+                raise InvalidVariableError(f"ERROR: invalid variable '{token}'")
+
+def is_valid_variable(variable):
+    if variable:
+        if not variable[0].isdigit():
+            if all(char.isdigit() or char.isalpha() or char == "_" for char in variable):
+                return True
+    return False
 
 main()
