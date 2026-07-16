@@ -92,9 +92,13 @@ def main() -> None:
                 print("ERROR: empty input")
                 continue
             result = evaluate(answer.split(), memory)
-            if result["should_print"]:
+            if not result["should_print"]:
                 continue
-            input_result = result["stack"].pop()
+            stack = result["stack"]
+            if isinstance(stack, list):
+                input_result = stack.pop()
+            else:
+                input_result = stack
             print(f"your answer: {input_result}")
         except EvaluationError as msg:
             print(msg)
