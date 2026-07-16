@@ -91,11 +91,10 @@ def main():
             if answer.strip() == '':
                 print("ERROR: empty input")
                 continue
-            previous_memory = memory.copy()
-            stack, memory = evaluate(answer.split(), memory)
-            if previous_memory != memory:
+            result = evaluate(answer.split(), memory)
+            if result["is_continue"]:
                 continue
-            result = stack.pop()
+            result = result["stack"].pop()
             print(f"your answer: {result}")
         except EvaluationError as msg:
             print(msg)
@@ -119,6 +118,8 @@ main_options = {
 
 def evaluate(tokens, memory):
     stack = []
+    result = {}
+    is_continue = False
     for token in tokens:
         number, symbol_type = parse_number(token)
         if symbol_type in ["integer", "float", "variable"]:
@@ -132,7 +133,8 @@ def evaluate(tokens, memory):
                         if not isinstance(first_number, str):
                             raise InvalidExpressionError("ERROR: left side of assignment is not a variable")
                         memory[first_number] = second_number
-                        return stack, memory
+                        is_continue = True
+                        continue
                     else:
                         if isinstance(first_number, str):
                             if first_number in memory:
@@ -146,13 +148,17 @@ def evaluate(tokens, memory):
                                 raise InvalidExpressionError(f"ERROR: variable '{second_number}' does not exist.")
                         temporary_result = operations[token](first_number, second_number)
                         stack.append(temporary_result)
+                        is_continue = False
                 else:
                     raise OperatorError(f"ERROR: unknown operator '{token}'\nif stuck, learn RPN in help -> explanation\nstack: {stack}")
             else:
                 raise EvaluationError(f"ERROR: operator '{token}' requires two operands.\nif stuck, learn RPN in help -> explanation\nstack: {stack}")
-    if not len(stack) == 1:
+    if not len(stack) == 1 and not is_continue:
         raise InvalidExpressionError(f"ERROR: expected one element in stack, got {len(stack)}\nif stuck, learn RPN in help -> explanation\nstack: {stack}")
-    return stack, memory
+    result["stack"] = stack
+    result["memory"] = memory
+    result["is_continue"] = is_continue
+    return result
 
 def parse_number(token):
     try:
