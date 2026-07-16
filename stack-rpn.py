@@ -88,7 +88,7 @@ def main():
                 else:
                     main_options[answer]()
                 continue
-            if answer or answer.strip() != '':
+            if answer.strip() == '':
                 print("ERROR: empty input")
                 continue
             previous_memory = memory.copy()
@@ -138,12 +138,12 @@ def evaluate(tokens, memory):
                             if first_number in memory:
                                 first_number = memory[first_number]
                             else:
-                                raise InvalidExpressionError("ERROR: left side of assignment is not a variable")
+                                raise InvalidExpressionError(f"ERROR: variable '{first_number}' does not exist.")
                         if isinstance(second_number, str):
                             if second_number in memory:
                                 second_number = memory[second_number]
                             else:
-                                raise InvalidExpressionError("ERROR: left side of assignment is not a variable")
+                                raise InvalidExpressionError(f"ERROR: variable '{second_number}' does not exist.")
                         temporary_result = operations[token](first_number, second_number)
                         stack.append(temporary_result)
                 else:
