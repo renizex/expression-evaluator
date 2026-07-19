@@ -34,6 +34,8 @@ operations = {
     "/": divide
 }
 
+operators = ["+", "-", "*", "/", "="]
+
 def user_help() -> None:
     while True:
         print("\nthis is a help page.")
@@ -56,7 +58,8 @@ def example() -> None:
     print("so, how does RPN work? well, you can't just enter '2 + 2' here. you will get the 'this expression is logically incorrect' error.")
     print("instead, you need to enter an expression in this notation: '2 2 +' it equals 4.")
     print("more difficult expression: instead of '5 * 6 + 4', you need to enter '5 6 * 4 +'. both equals 34.")
-    print("hope you got the idea. press enter to return at the 'help' menu.")
+    print("hope you got the idea. press enter to return at the 'help' menu.\n")
+    print("also, you can initialize a variable. example: 'x 5 ='. gives 'x = 5' in memory.")
     input("> ")
 
 def infix() -> None:
@@ -88,20 +91,24 @@ def main() -> None:
                 else:
                     main_options[answer]()
                 continue
-            if answer.strip() == '':
-                print("ERROR: empty input")
+            if not pre_eval_main_input(answer):
                 continue
-            result = evaluate(answer.split(), memory)
-            if not result["should_print"]:
+            input_result = evaluate(answer.split(), memory)
+            if not input_result and input_result != 0:
                 continue
-            stack = result["stack"]
-            if isinstance(stack, list):
-                input_result = stack.pop()
-            else:
-                input_result = stack
             print(f"your answer: {input_result}")
         except EvaluationError as msg:
             print(msg)
+
+def pre_eval_main_input(answer: str) -> bool:
+    if answer.strip() == '':
+        print("ERROR: empty input")
+        return False
+    separated = answer.split()
+    if len(separated) == 1:
+        print("ERROR: expression cannot be evaluated.")
+        return False
+    return True
 
 def show_memory(memory: dict[str, int | float]) -> None:
     if memory:
@@ -120,13 +127,8 @@ main_options = {
     "help": user_help
 }
 
-def evaluate(tokens: list[str], memory: dict[str, int | float]):
+def evaluate(tokens: list[str], memory: dict[str, int | float]) -> int | None:
     stack = []
-    should_print = True
-    result = {
-        "stack": stack,
-        "should_print": should_print
-    }
     for token in tokens:
         number, symbol_type = parse_number(token)
         if symbol_type in ["integer", "float", "variable"]:
@@ -135,34 +137,42 @@ def evaluate(tokens: list[str], memory: dict[str, int | float]):
             if len(stack) > 1:
                 second_number = stack.pop()
                 first_number = stack.pop()
-                if token in ["+", "-", "*", "/", "="]:
+                if token in operators:
                     if token == '=':
-                        if not isinstance(first_number, str):
-                            raise InvalidExpressionError("ERROR: left side of assignment is not a variable")
-                        memory[first_number] = second_number
-                        result["should_print"] = False
+                        assign_value(first_number, second_number, memory)
                         continue
                     else:
-                        if isinstance(first_number, str):
-                            if first_number in memory:
-                                first_number = memory[first_number]
-                            else:
-                                raise InvalidExpressionError(f"ERROR: variable '{first_number}' does not exist.")
-                        if isinstance(second_number, str):
-                            if second_number in memory:
-                                second_number = memory[second_number]
-                            else:
-                                raise InvalidExpressionError(f"ERROR: variable '{second_number}' does not exist.")
+                        first_number = resolve_operand(first_number, memory)
+                        second_number = resolve_operand(second_number, memory)
                         temporary_result = operations[token](first_number, second_number)
                         stack.append(temporary_result)
-                        result["should_print"] = True
                 else:
                     raise OperatorError(f"ERROR: unknown operator '{token}'\nif stuck, learn RPN in help -> explanation\nstack: {stack}")
             else:
                 raise EvaluationError(f"ERROR: operator '{token}' requires two operands.\nif stuck, learn RPN in help -> explanation\nstack: {stack}")
-    if len(stack) != 1 and result["should_print"]:
+    if len(stack) > 1:
         raise InvalidExpressionError(f"ERROR: expected one element in stack, got {len(stack)}\nif stuck, learn RPN in help -> explanation\nstack: {stack}")
-    return result
+    elif len(stack) == 1:
+        return stack[0]
+    return None
+
+def assign_value(first_value: str, second_value: int | float, memory: dict[str, int | float]):
+    if not isinstance(first_value, str):
+        raise InvalidExpressionError("ERROR: left side of assignment is not a variable")
+    if isinstance(second_value, str):
+        if second_value not in memory:
+            raise InvalidExpressionError("ERROR: right side of assignment is not a number")
+        else:
+            second_value = memory[second_value]
+    memory[first_value] = second_value
+
+def resolve_operand(value: str | int | float, memory: dict[str, int | float]) -> int | float:
+    if isinstance(value, str):
+        if value in memory:
+            return memory[value]
+    else:
+        return value
+    raise InvalidExpressionError(f"ERROR: variable '{value}' does not exist.")
 
 def parse_number(token: str) -> tuple[int | float | str, str]:
     try:
@@ -171,7 +181,7 @@ def parse_number(token: str) -> tuple[int | float | str, str]:
         try:
             return float(token), "float"
         except ValueError:
-            if token in ["+", "-", "*", "/", "="]:
+            if token in operators:
                 return str(token), "operator"
             if is_valid_variable(str(token)):
                 return token, "variable"
