@@ -1,3 +1,7 @@
+from dataclasses import dataclass
+from typing import TypeAlias, Literal, TypeGuard
+
+
 class EvaluationError(Exception):
     pass
 
@@ -13,16 +17,19 @@ class DivideByZeroError(EvaluationError):
 class InvalidVariableError(EvaluationError):
     pass
 
-def plus(a: int | float, b: int | float) -> int | float:
+Number: TypeAlias = int | float
+Memory: TypeAlias = dict[str, Number]
+
+def plus(a: Number, b: Number) -> Number:
     return a+b
 
-def minus(a: int | float, b: int | float) -> int | float:
+def minus(a: Number, b: Number) -> Number:
     return a-b
 
-def multiply(a: int | float, b: int | float) -> int | float:
+def multiply(a: Number, b: Number) -> Number:
     return a*b
 
-def divide(a: int | float, b: int | float) -> int | float:
+def divide(a: Number, b: Number) -> Number:
     if b != 0:
         return a/b
     raise DivideByZeroError("ERROR: division by zero")
@@ -34,7 +41,27 @@ operations = {
     "/": divide
 }
 
-operators = ["+", "-", "*", "/", "="]
+OperatorStr = Literal["+", "-", "*", "/", "="]
+OPERATORS: set[OperatorStr] = {"+", "-", "*", "/", "="}
+
+@dataclass
+class IntegerToken:
+    value: int
+
+@dataclass
+class FloatToken:
+    value: float
+
+@dataclass
+class OperatorToken:
+    value: OperatorStr
+
+@dataclass
+class VariableToken:
+    value: str
+
+Token: TypeAlias = IntegerToken | FloatToken | OperatorToken | VariableToken
+Operand: TypeAlias = IntegerToken | FloatToken | VariableToken
 
 def user_help() -> None:
     while True:
@@ -79,7 +106,7 @@ help_options = {
 }
 
 def main() -> None:
-    memory = {}
+    memory: Memory = {}
     print("RPN Calculator")
     print("enter 'help' for commands")
     while True:
@@ -93,7 +120,7 @@ def main() -> None:
                 continue
             if not pre_eval_main_input(answer):
                 continue
-            input_result = evaluate(answer.split(), memory)
+            input_result = evaluate(tokenize(answer.split()), memory)
             if not input_result and input_result != 0:
                 continue
             print(f"your answer: {input_result}")
@@ -110,14 +137,14 @@ def pre_eval_main_input(answer: str) -> bool:
         return False
     return True
 
-def show_memory(memory: dict[str, int | float]) -> None:
+def show_memory(memory: Memory) -> None:
     if memory:
         for key, value in memory.items():
             print(f"{key} = {value}")
     else:
         print("memory is empty")
 
-def clear_memory(memory: dict[str, int | float]) -> None:
+def clear_memory(memory: Memory) -> None:
     memory.clear()
     print("memory cleared")
 
@@ -127,66 +154,81 @@ main_options = {
     "help": user_help
 }
 
-def evaluate(tokens: list[str], memory: dict[str, int | float]) -> int | None:
-    stack = []
+def evaluate(tokens: list[Token], memory: Memory) -> Number | None:
+    stack: list[Operand] = []
     for token in tokens:
-        number, symbol_type = parse_number(token)
-        if symbol_type in ["integer", "float", "variable"]:
-            stack.append(number)
+        if isinstance(token, (IntegerToken, FloatToken, VariableToken)):
+            stack.append(token)
         else:
             if len(stack) > 1:
                 second_number = stack.pop()
                 first_number = stack.pop()
-                if token in operators:
-                    if token == '=':
-                        assign_value(first_number, second_number, memory)
-                        continue
-                    else:
-                        first_number = resolve_operand(first_number, memory)
-                        second_number = resolve_operand(second_number, memory)
-                        temporary_result = operations[token](first_number, second_number)
-                        stack.append(temporary_result)
+                if token.value == '=':
+                    assign_value(first_number, second_number, memory)
+                    continue
                 else:
-                    raise OperatorError(f"ERROR: unknown operator '{token}'\nif stuck, learn RPN in help -> explanation\nstack: {stack}")
+                    first_number = resolve_operand(first_number, memory)
+                    second_number = resolve_operand(second_number, memory)
+                    temporary_result = create_number_token(operations[token.value](first_number, second_number))
+                    stack.append(temporary_result)
             else:
-                raise EvaluationError(f"ERROR: operator '{token}' requires two operands.\nif stuck, learn RPN in help -> explanation\nstack: {stack}")
+                raise EvaluationError(f"ERROR: operator '{token.value}' requires two operands.\nif stuck, learn RPN in help -> explanation\nstack: {stack}")
     if len(stack) > 1:
         raise InvalidExpressionError(f"ERROR: expected one element in stack, got {len(stack)}\nif stuck, learn RPN in help -> explanation\nstack: {stack}")
     elif len(stack) == 1:
-        return stack[0]
+        return resolve_operand(stack[0], memory)
     return None
 
-def assign_value(first_value: str, second_value: int | float, memory: dict[str, int | float]):
-    if not isinstance(first_value, str):
-        raise InvalidExpressionError("ERROR: left side of assignment is not a variable")
-    if isinstance(second_value, str):
-        if second_value not in memory:
-            raise InvalidExpressionError("ERROR: right side of assignment is not a number")
-        else:
-            second_value = memory[second_value]
-    memory[first_value] = second_value
+def create_number_token(number: int | float) -> IntegerToken | FloatToken:
+    match number:
+        case int():
+            return IntegerToken(number)
+        case float():
+            return FloatToken(number)
+        case _:
+            raise InvalidExpressionError(f"ERROR: expected integer or float, got {type(number)}")
 
-def resolve_operand(value: str | int | float, memory: dict[str, int | float]) -> int | float:
-    if isinstance(value, str):
-        if value in memory:
-            return memory[value]
-    else:
-        return value
-    raise InvalidExpressionError(f"ERROR: variable '{value}' does not exist.")
+def assign_value(first_token: Token, second_token: Operand, memory: Memory):
+    match first_token:
+        case VariableToken(name):
+            number = resolve_operand(second_token, memory)
+            memory[name] = number
+            return
+    raise InvalidExpressionError("ERROR: left side of assignment is not a variable.")
 
-def parse_number(token: str) -> tuple[int | float | str, str]:
+def resolve_operand(token: Operand, memory: Memory) -> Number:
+    match token:
+        case IntegerToken(number):
+            return number
+        case FloatToken(number):
+            return number
+        case VariableToken(name):
+            if name in memory:
+                return memory[name]
+    raise InvalidExpressionError(f"ERROR: variable '{token}' does not exist.")
+
+def tokenize(raw_tokens: list[str]) -> list[Token]:
+    tokens: list[Token] = []
+    for raw in raw_tokens:
+        tokens.append(parse_token(raw))
+    return tokens
+
+def parse_token(raw: str) -> Token:
     try:
-        return int(token), "integer"
+        return IntegerToken(value=int(raw))
     except ValueError:
         try:
-            return float(token), "float"
+            return FloatToken(value=float(raw))
         except ValueError:
-            if token in operators:
-                return str(token), "operator"
-            if is_valid_variable(str(token)):
-                return token, "variable"
+            if is_operator(raw):
+                return OperatorToken(value=raw)
+            elif is_valid_variable(str(raw)):
+                return VariableToken(value=raw)
             else:
-                raise InvalidVariableError(f"ERROR: invalid variable '{token}'")
+                raise InvalidVariableError(f"ERROR: invalid variable '{raw}'")
+
+def is_operator(token: str) -> TypeGuard[OperatorStr]:
+    return token in OPERATORS
 
 def is_valid_variable(variable: str) -> bool:
     if variable:
