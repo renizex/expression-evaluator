@@ -8,19 +8,42 @@ works, but primitive and contains many flaws in any aspect.
 example: 1 + 1 = 2
 status: done.
 
-2. stack-rpn (reverse Polish Notation)
-classic sorting approach using stacks.
+2. stack-based evaluator
+a stack-based mathematical expression evaluator supporting Reverse Polish Notation (RPN) and infix notation.
+uses a multi-stage processing pipeline:
+input -> tokenization -> expression conversion -> evaluation -> output
+
+supported features:
+Reverse Polish Notation (RPN):
 example: 1 1 + = 2
-status: work in progress
-
-3. stack-infix
+infix notation:
 example: 1 + 1 = 2
-a stack based evaluator that parses infix notation.
-status: planned.
+you can switch between modes by typing 'RPN' and 'INFIX' respectively.
 
-5. AST
+architecture:
+token-based processing.
+stack-based evaluation.
+separate tokenization and evaluation stages.
+
+variables and memory:
+
+rpn:
+x 5 =
+infix:
+x = 5
+
+in memory: x = 5
+
+basic operations:
++, -, *, /.
+
+status: active development.
+
+planned:
+parentheses for infix expressions.
+operators: ^, %.
+further architectural improvements.
+
+3. AST
 builds an abstract syntax tree before evaluation
 status: planned.
-
-also planned but not necessarily: 
-combine the second and third ones into one, and add an option for the user to select the mode.
