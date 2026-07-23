@@ -30,9 +30,9 @@ def multiply(a: Number, b: Number) -> Number:
     return a*b
 
 def divide(a: Number, b: Number) -> Number:
-    if b != 0:
-        return a/b
-    raise DivideByZeroError("ERROR: division by zero")
+    if b == 0:
+        raise DivideByZeroError("ERROR: division by zero")
+    return a/b
 
 operations = {
     "+": plus,
@@ -107,8 +107,12 @@ help_options = {
 
 def main() -> None:
     memory: Memory = {}
+    is_infix = False
     print("RPN Calculator")
-    print("enter 'help' for commands")
+    if not is_infix:
+        print("enter 'help' for commands or 'INFIX' to enter INFIX MODE.")
+    else:
+        print("enter 'help' for commands or 'RPN' to enter RPN MODE.")
     while True:
         try:
             answer = input("> ")
@@ -118,14 +122,45 @@ def main() -> None:
                 else:
                     main_options[answer]()
                 continue
+            elif answer.strip().upper() == "INFIX":
+                print("changed to INFIX MODE")
+                is_infix = True
+                continue
+            elif answer.strip().upper() == "RPN":
+                print("changed to RPN MODE")
+                is_infix = False
+                continue
             if not pre_eval_main_input(answer):
                 continue
-            input_result = evaluate(tokenize(answer.split()), memory)
+            tokens = answer.split()
+            if is_infix:
+                tokens = infix_to_rpn(answer.split())
+            input_result = evaluate(tokenize(tokens), memory)
             if not input_result and input_result != 0:
                 continue
             print(f"your answer: {input_result}")
         except EvaluationError as msg:
             print(msg)
+
+def infix_to_rpn(tokens: list[str]) -> list[str]:
+    priority: dict[str, int] = { "=": 0, "+": 1, "-": 1, "*": 2, "/": 2}
+    stack: list[str] = []
+    output: list[str] = []
+    for token in tokens:
+        if token in OPERATORS:
+            if stack:
+                if priority[token] <= priority[stack[-1]]:
+                    output.append(stack.pop())
+                    stack.append(token)
+                else:
+                    stack.append(token)
+            else:
+                stack.append(token)
+        else:
+            output.append(token)
+    while stack:
+        output.append(stack.pop())
+    return output
 
 def pre_eval_main_input(answer: str) -> bool:
     if answer.strip() == '':
@@ -205,7 +240,7 @@ def resolve_operand(token: Operand, memory: Memory) -> Number:
         case VariableToken(name):
             if name in memory:
                 return memory[name]
-    raise InvalidExpressionError(f"ERROR: variable '{token}' does not exist.")
+    raise InvalidExpressionError(f"ERROR: variable '{token.value}' does not exist.")
 
 def tokenize(raw_tokens: list[str]) -> list[Token]:
     tokens: list[Token] = []
