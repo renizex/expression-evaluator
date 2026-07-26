@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from typing import TypeAlias, Literal, TypeGuard
-
+import re
 
 class EvaluationError(Exception):
     pass
@@ -42,7 +42,7 @@ operations = {
 }
 
 OperatorStr = Literal["+", "-", "*", "/", "="]
-OPERATORS: set[OperatorStr] = {"+", "-", "*", "/", "="}
+OPERATORS = {"+", "-", "*", "/", "=", "(", ")"}
 
 @dataclass
 class IntegerToken:
@@ -115,45 +115,61 @@ def main() -> None:
         print("enter 'help' for commands or 'RPN' to enter RPN MODE.")
     while True:
         try:
-            answer = input("> ")
+            answer = input("> ").strip()
             if answer in main_options:
                 if answer in ["memory", "clear"]:
                     main_options[answer](memory)
                 else:
                     main_options[answer]()
                 continue
-            elif answer.strip().upper() == "INFIX":
+            elif answer.upper() == "INFIX":
                 print("changed to INFIX MODE")
                 is_infix = True
                 continue
-            elif answer.strip().upper() == "RPN":
+            elif answer.upper() == "RPN":
                 print("changed to RPN MODE")
                 is_infix = False
                 continue
             if not pre_eval_main_input(answer):
                 continue
-            tokens = answer.split()
+            tokens = tokenize(answer.strip())
             if is_infix:
-                tokens = infix_to_rpn(answer.split())
-            input_result = evaluate(tokenize(tokens), memory)
+                tokens = infix_to_rpn(tokens)
+            input_result = evaluate(objectification(tokens), memory)
             if not input_result and input_result != 0:
                 continue
             print(f"your answer: {input_result}")
         except EvaluationError as msg:
             print(msg)
 
+def tokenize(answer: str) -> list[str]:
+    tokens = []
+    raw_tokens = (re.split(r"([+\-*/=()\s])", answer))
+    for token in raw_tokens:
+        stripped_token = token.strip()
+        if stripped_token:
+            tokens.append(stripped_token)
+    return tokens
+
 def infix_to_rpn(tokens: list[str]) -> list[str]:
-    priority: dict[str, int] = { "=": 0, "+": 1, "-": 1, "*": 2, "/": 2}
+    priority: dict[str, int] = {"=": 0, "+": 1, "-": 1, "*": 2, "/": 2, "(": 0, ")": 0}
     stack: list[str] = []
     output: list[str] = []
     for token in tokens:
         if token in OPERATORS:
-            if stack:
-                if priority[token] <= priority[stack[-1]]:
+            if token == "(":
+                stack.append(token)
+                continue
+            elif token == ")":
+                while stack:
+                    if stack[-1] == '(':
+                        stack.pop()
+                        break
                     output.append(stack.pop())
-                    stack.append(token)
-                else:
-                    stack.append(token)
+            elif stack:
+                while stack and priority[token] <= priority[stack[-1]] and stack[-1] != "(":
+                    output.append(stack.pop())
+                stack.append(token)
             else:
                 stack.append(token)
         else:
@@ -242,7 +258,7 @@ def resolve_operand(token: Operand, memory: Memory) -> Number:
                 return memory[name]
     raise InvalidExpressionError(f"ERROR: variable '{token.value}' does not exist.")
 
-def tokenize(raw_tokens: list[str]) -> list[Token]:
+def objectification(raw_tokens: list[str]) -> list[Token]:
     tokens: list[Token] = []
     for raw in raw_tokens:
         tokens.append(parse_token(raw))
