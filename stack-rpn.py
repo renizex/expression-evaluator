@@ -34,15 +34,18 @@ def divide(a: Number, b: Number) -> Number:
         raise DivideByZeroError("ERROR: division by zero")
     return a/b
 
+def unary(a: Number) -> Number:
+    return -a
+
 operations = {
     "+": plus,
     "-": minus,
     "*": multiply,
-    "/": divide
+    "/": divide,
 }
 
-OperatorStr = Literal["+", "-", "*", "/", "="]
-OPERATORS = {"+", "-", "*", "/", "=", "(", ")"}
+OperatorStr = Literal["+", "-", "*", "/", "=", "u-"]
+OPERATORS = {"+", "-", "*", "/", "=", "u-", "(", ")"}
 
 @dataclass
 class IntegerToken:
@@ -86,6 +89,7 @@ def example() -> None:
     print("instead, you need to enter an expression in this notation: '2 2 +' it equals 4.")
     print("more difficult expression: instead of '5 * 6 + 4', you need to enter '5 6 * 4 +'. both equals 34.")
     print("hope you got the idea. press enter to return at the 'help' menu.\n")
+    print("learn more about INFIX MODE in: 2. INFIX MODE.")
     print("also, you can initialize a variable. example: 'x 5 ='. gives 'x = 5' in memory.")
     input("> ")
 
@@ -132,9 +136,10 @@ def main() -> None:
                 continue
             if not pre_eval_main_input(answer):
                 continue
-            tokens = tokenize(answer.strip())
             if is_infix:
-                tokens = infix_to_rpn(tokens)
+                tokens = infix_to_rpn(tokenize_infix(answer.strip()))
+            else:
+                tokens = tokenize_rpn(answer.strip())
             input_result = evaluate(objectification(tokens), memory)
             if not input_result and input_result != 0:
                 continue
@@ -142,7 +147,25 @@ def main() -> None:
         except EvaluationError as msg:
             print(msg)
 
-def tokenize(answer: str) -> list[str]:
+VARIABLE_PATTERN = re.compile(r"-?[a-zA-Zа-яА-Я_]\w*")
+NUMBER_PATTERN = re.compile(r"-?\d+\.?\d*")
+OPERATOR_PATTERN = re.compile(r"[+\-*/=]")
+
+def tokenize_rpn(answer: str) -> list[str]:
+    raw_tokens = answer.split()
+    tokens = []
+    for token in raw_tokens:
+        if NUMBER_PATTERN.fullmatch(token):
+            tokens.append(token)
+        elif VARIABLE_PATTERN.fullmatch(token):
+            tokens.append(token)
+        elif OPERATOR_PATTERN.fullmatch(token):
+            tokens.append(token)
+        else:
+            raise InvalidExpressionError(f"ERROR: invalid RPN token - '{token}'")
+    return tokens
+
+def tokenize_infix(answer: str) -> list[str]:
     tokens = []
     raw_tokens = (re.split(r"([+\-*/=()\s])", answer))
     for token in raw_tokens:
@@ -151,10 +174,19 @@ def tokenize(answer: str) -> list[str]:
             tokens.append(stripped_token)
     return tokens
 
+OPERATOR_PRIORITY = {
+    "=": 0,
+    "+": 1,
+    "-": 1,
+    "*": 2,
+    "/": 2,
+    "u-": 3,
+}
+
 def infix_to_rpn(tokens: list[str]) -> list[str]:
-    priority: dict[str, int] = {"=": 0, "+": 1, "-": 1, "*": 2, "/": 2, "(": 0, ")": 0}
     stack: list[str] = []
     output: list[str] = []
+    prev_token: str | None = None
     for token in tokens:
         if token in OPERATORS:
             if token == "(":
@@ -162,29 +194,41 @@ def infix_to_rpn(tokens: list[str]) -> list[str]:
                 continue
             elif token == ")":
                 while stack:
-                    if stack[-1] == '(':
-                        stack.pop()
+                    if stack[-1] == "(":
                         break
                     output.append(stack.pop())
-            elif stack:
-                while stack and priority[token] <= priority[stack[-1]] and stack[-1] != "(":
-                    output.append(stack.pop())
-                stack.append(token)
-            else:
-                stack.append(token)
+                if stack and stack[-1] == "(":
+                    stack.pop()
+                else:
+                    raise InvalidExpressionError(f"ERROR: unmatched closing parenthesis\noutput: {output}")
+                continue
+            elif token == "-":
+                if (
+                        prev_token is None
+                        or prev_token == "("
+                        or prev_token in OPERATORS
+                ):
+                    stack.append("u-")
+                    continue
+            while (
+                    stack
+                    and stack[-1] != "("
+                    and OPERATOR_PRIORITY[token] <= OPERATOR_PRIORITY[stack[-1]]
+            ):
+                output.append(stack.pop())
+            stack.append(token)
         else:
             output.append(token)
+        prev_token = token
     while stack:
+        if stack[-1] == "(":
+            raise InvalidExpressionError(f"ERROR: unmatched opening parenthesis\noutput: {output}")
         output.append(stack.pop())
     return output
 
 def pre_eval_main_input(answer: str) -> bool:
     if answer.strip() == '':
         print("ERROR: empty input")
-        return False
-    separated = answer.split()
-    if len(separated) == 1:
-        print("ERROR: expression cannot be evaluated.")
         return False
     return True
 
@@ -211,6 +255,11 @@ def evaluate(tokens: list[Token], memory: Memory) -> Number | None:
         if isinstance(token, (IntegerToken, FloatToken, VariableToken)):
             stack.append(token)
         else:
+            if token.value == "u-":
+                number = resolve_operand(stack.pop(), memory)
+                temporary_result = create_number_token(unary(number))
+                stack.append(temporary_result)
+                continue
             if len(stack) > 1:
                 second_number = stack.pop()
                 first_number = stack.pop()
