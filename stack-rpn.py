@@ -2,10 +2,11 @@ import re
 from abc import ABC
 from dataclasses import dataclass
 from typing import TypeAlias, Literal, TypeGuard, Callable
+import math
 
-VARIABLE_PATTERN = re.compile(r"-?[a-zA-Zа-яА-Я_]\w*")
+VARIABLE_PATTERN = re.compile(r"[a-zA-Zа-яА-Я_]\w*")
 NUMBER_PATTERN = re.compile(r"-?\d+\.?\d*")
-OPERATOR_PATTERN = re.compile(r"[+\-*/=]")
+OPERATOR_PATTERN = re.compile(r"sqrt|u\^|[+\-*/=^]")
 
 class EvaluationError(Exception):
     pass
@@ -13,13 +14,13 @@ class EvaluationError(Exception):
 class InvalidExpressionError(EvaluationError):
     pass
 
-class OperatorError(EvaluationError):
-    pass
-
 class DivideByZeroError(EvaluationError):
     pass
 
 class InvalidVariableError(EvaluationError):
+    pass
+
+class SquareRootOfNegativeError(EvaluationError):
     pass
 
 Number: TypeAlias = int | float
@@ -42,7 +43,20 @@ def divide(a: Number, b: Number) -> Number:
 def unary_minus(a: Number) -> Number:
     return -a
 
-OperatorStr: TypeAlias = Literal["+", "-", "*", "/", "=", "u-", "(", ")"]
+def degree(a: Number, b: Number) -> Number:
+    if a == 0 and b < 0:
+        raise DivideByZeroError("ERROR: division by zero")
+    return a**b
+
+def square(a: Number) -> Number:
+    return a*a
+
+def sqrt(a: Number) -> Number:
+    if a < 0:
+        raise SquareRootOfNegativeError(f"ERROR: number '{a}' is negative")
+    return math.sqrt(a)
+
+OperatorStr: TypeAlias = Literal["+", "-", "*", "/", "=", "u-", "(", ")", "^", "u^", "sqrt"]
 
 @dataclass
 class IntegerToken:
@@ -63,9 +77,8 @@ class VariableToken:
 Token: TypeAlias = IntegerToken | FloatToken | OperatorToken | VariableToken
 Operand: TypeAlias = IntegerToken | FloatToken | VariableToken
 
-def assign_value(variable: VariableToken, number: Number, memory: Memory):
+def assign_value(variable: VariableToken, number: Number, memory: Memory) -> None:
     memory[variable.value] = number
-    return
 
 @dataclass(kw_only=True)
 class OperatorInfo(ABC):
@@ -96,6 +109,9 @@ OPERATORS = {
     "*": BinaryOperatorInfo(priority=2, function=multiply),
     "/": BinaryOperatorInfo(priority=2, function=divide),
     "u-": UnaryOperatorInfo(priority=3, function=unary_minus),
+    "^": BinaryOperatorInfo(priority=4, function=degree),
+    "u^": UnaryOperatorInfo(priority=5, function=square),
+    "sqrt": UnaryOperatorInfo(priority=6, function=sqrt),
 }
 
 def help_main() -> None:
@@ -105,11 +121,12 @@ def help_main() -> None:
         print("1. an example and an explanation if i'm stuck.")
         print("2. INFIX MODE")
         print("3. commands")
-        print("4. exit")
+        print("4. operators")
+        print("5. exit")
         answer = input("> ")
         if answer in help_menu:
             help_menu[answer]()
-        elif answer == "4":
+        elif answer == "5":
             return
         else:
             print("\nunknown command.")
@@ -135,11 +152,25 @@ def help_infix() -> None:
     print("5 * 6 / 7")
     print("5 + (10 * 5)")
     print("-5 - (200 + 400)")
+    print("5 ^ 4")
+    print("sqrt(sqrt(256)) + 5^ ('5^' automatically squares the number 5)")
     print("enable this mode by typing 'INFIX' in the main menu.")
     input("> ")
 
+def help_operators() -> None:
+    print("\nall of operators are similar to RPN and INFIX MODES.")
+    print("'+' - plus")
+    print("'-' - minus")
+    print("'*' - multiply")
+    print("'/' - divide")
+    print("'^' - exponentiation")
+    print("'u^' - square (RPN only)")
+    print("'=' - assign")
+    print("'sqrt' - square root of the expression")
+    input("> ")
+
 def help_commands() -> None:
-    print("\nINFIX - switch to INFIX MODE. expect bugs.")
+    print("\nINFIX - switch to INFIX MODE.")
     print("RPN - switch to RPN MODE")
     print("\nmemory - see your memory.")
     print("clear - clear your memory.")
@@ -148,13 +179,15 @@ def help_commands() -> None:
 help_menu = {
     "1": help_explanation,
     "2": help_infix,
-    "3": help_commands
+    "3": help_commands,
+    "4": help_operators
 }
 
 def main() -> None:
     memory: Memory = {}
-    is_infix = False
+    is_infix = True
     print("RPN Calculator")
+    print(f"you are in {mode_output(is_infix)}")
     print("enter 'help' for commands")
     print("enter 'INFIX' to enter INFIX MODE")
     print("enter 'RPN' to enter RPN MODE")
@@ -165,12 +198,19 @@ def main() -> None:
             if is_continue:
                 continue
             tokens = lex_expression(answer, is_infix)
-            input_result = evaluate(parse_tokens(tokens), memory)
-            if input_result is None:
+            output_result = evaluate(parse_tokens(tokens), memory)
+            if output_result is None:
                 continue
-            print(f"your answer: {input_result}")
+            print(f"your answer: {normalize_number(output_result)}")
         except EvaluationError as msg:
             print(msg)
+        except OverflowError:
+            print("ERROR: number is too large to calculate.")
+
+def mode_output(is_infix: bool) -> str:
+    if is_infix:
+        return "INFIX MODE"
+    return "RPN MODE"
 
 def main_processing(answer: str, memory: Memory, is_infix: bool) -> tuple[bool, bool]:
     if answer.strip() == '':
@@ -189,6 +229,18 @@ def main_processing(answer: str, memory: Memory, is_infix: bool) -> tuple[bool, 
         print("changed to RPN MODE")
         return True, False
     return False, is_infix
+
+def normalize_number(value: Number | None) -> Number | None:
+    if value is None:
+        return None
+    match value:
+        case int():
+            return value
+        case float():
+            clean_value = round(value, 12)
+            if clean_value % 1 == 0:
+                return int(clean_value)
+            return clean_value
 
 def lex_expression(expression: str, is_infix: bool) -> list[str]:
     if is_infix:
@@ -211,7 +263,8 @@ def lex_rpn(expression: str) -> list[str]:
 
 def lex_infix(expression: str) -> list[str]:
     lexemes = []
-    raw_tokens = (re.split(r"([+\-*/=()\s])", expression))
+    raw_tokens = (re.split(r"([+\-*/=()^\s])", expression))
+
     for symbol in raw_tokens:
         stripped_symbol = symbol.strip()
         if stripped_symbol:
@@ -222,7 +275,7 @@ def infix_to_rpn(lexemes: list[str]) -> list[str]:
     stack: list[str] = []
     output: list[str] = []
     prev_lexeme: str | None = None
-    for lexeme in lexemes:
+    for index, lexeme in enumerate(lexemes):
         if lexeme in OPERATORS:
             if lexeme == "(":
                 stack.append(lexeme)
@@ -235,7 +288,7 @@ def infix_to_rpn(lexemes: list[str]) -> list[str]:
                 if stack and stack[-1] == "(":
                     stack.pop()
                 else:
-                    raise InvalidExpressionError(f"ERROR: unmatched closing parenthesis\noutput: {output}")
+                    raise InvalidExpressionError(f"ERROR: unmatched closing parenthesis.")
                 continue
             elif lexeme == "-":
                 if (
@@ -245,26 +298,45 @@ def infix_to_rpn(lexemes: list[str]) -> list[str]:
                 ):
                     stack.append("u-")
                     continue
-            while (
-                    stack
-                    and stack[-1] != "("
-                    and OPERATORS[lexeme].priority <= OPERATORS[stack[-1]].priority
-            ):
-                output.append(stack.pop())
+            elif lexeme == "^":
+                next_lexeme = None if index == len(lexemes) - 1 else lexemes[index + 1]
+                after_next = None if index >= len(lexemes) - 2 else lexemes[index + 2]
+                is_next_unary_minus = (
+                    next_lexeme == "-"
+                    and after_next is not None
+                    and (after_next not in OPERATORS or after_next == "(")
+                )
+                if (
+                        prev_lexeme
+                        and prev_lexeme not in OPERATORS
+                        and (next_lexeme is None or next_lexeme in OPERATORS and next_lexeme != "(" and not is_next_unary_minus)
+                ):
+                    stack.append("u^")
+                    continue
+            while stack and stack[-1] != "(":
+                current = OPERATORS[lexeme]
+                top = OPERATORS[stack[-1]]
+                if current.priority < top.priority or (current.priority == top.priority and not is_right_associativity(lexeme)):
+                    output.append(stack.pop())
+                else:
+                    break
             stack.append(lexeme)
         else:
             output.append(lexeme)
         prev_lexeme = lexeme
     while stack:
         if stack[-1] == "(":
-            raise InvalidExpressionError(f"ERROR: unmatched opening parenthesis\noutput: {output}")
+            raise InvalidExpressionError(f"ERROR: unmatched opening parenthesis.")
         output.append(stack.pop())
     return output
+
+def is_right_associativity(lexeme: str) -> bool:
+    return lexeme in ['^', 'u^']
 
 def show_memory(memory: Memory) -> None:
     if memory:
         for key, value in memory.items():
-            print(f"{key} = {value}")
+            print(f"{key} = {normalize_number(value)}")
     else:
         print("memory is empty")
 
@@ -302,27 +374,27 @@ def evaluate(tokens: list[Token], memory: Memory) -> Number | None:
                     operator.function(a, b, memory)
                     continue
     if len(stack) > 1:
-        raise InvalidExpressionError(f"ERROR: expected one element in stack, got {len(stack)}\nif stuck, learn RPN in help -> explanation\nstack: {stack}")
+        raise InvalidExpressionError(f"ERROR: expected one element in stack, got {len(stack)}\nif stuck, learn RPN in help -> explanation.")
     elif len(stack) == 1:
         return resolve_operand(stack[0], memory)
     return None
 
 def pop_operand(stack: list[Operand], memory: Memory, token: Token) -> Number:
     if not stack:
-        raise EvaluationError(f"ERROR: operator '{token.value}' requires one operand.\nif stuck, learn RPN in help -> explanation\nstack: {stack}")
+        raise EvaluationError(f"ERROR: operator '{token.value}' requires one operand.\nif stuck, learn RPN in help -> explanation.")
     operand = stack.pop()
     return resolve_operand(operand, memory)
 
 def pop_two_operands(stack: list[Operand], memory: Memory, token: Token) -> tuple[Number, Number]:
     if not len(stack) > 1:
-        raise EvaluationError(f"ERROR: operator '{token.value}' requires two operands.\nif stuck, learn RPN in help -> explanation\nstack: {stack}")
+        raise EvaluationError(f"ERROR: operator '{token.value}' requires two operands.\nif stuck, learn RPN in help -> explanation.")
     second_operand = stack.pop()
     first_operand = stack.pop()
     return resolve_operand(first_operand, memory), resolve_operand(second_operand, memory)
 
 def pop_assignable(stack: list[Operand], token: Token) -> VariableToken:
     if not stack:
-        raise EvaluationError(f"ERROR: operator '{token.value}' requires two operands.\nif stuck, learn RPN in help -> explanation\nstack: {stack}")
+        raise EvaluationError(f"ERROR: operator '{token.value}' requires two operands.\nif stuck, learn RPN in help -> explanation.")
     variable = stack.pop()
     if not isinstance(variable, VariableToken):
         raise InvalidVariableError(f"ERROR: expected variable got '{variable.value}'")
@@ -334,15 +406,10 @@ def create_number_token(number: int | float) -> IntegerToken | FloatToken:
             return IntegerToken(number)
         case float():
             return FloatToken(number)
+        case complex():
+            raise InvalidExpressionError(f"ERROR: unexpected complex number '{number}'")
         case _:
             raise InvalidExpressionError(f"ERROR: expected integer or float, got {type(number)}")
-
-def assign_value(first_token: VariableToken, second_token: Operand, memory: Memory):
-    match first_token:
-        case VariableToken(name):
-            number = resolve_operand(second_token, memory)
-            memory[name] = number
-            return
 
 def resolve_operand(token: Operand, memory: Memory) -> Number:
     match token:
@@ -385,4 +452,5 @@ def is_valid_variable(variable: str) -> bool:
                 return True
     return False
 
-main()
+if __name__ == '__main__':
+    main()
