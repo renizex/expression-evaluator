@@ -2,9 +2,6 @@
 a plenty of implementations of a mathematical expression evaluator.
 starting from my own naive algorithm and ending with an AST-based parser.
 
-## requirements
-Python 3.11+
-
 1. prototype.
 my first attempt.
 works, but primitive and contains many flaws in any aspect.
@@ -12,63 +9,41 @@ example: 1 + 1 = 2
 status: done.
 
 2. stack-based evaluator
-a stack-based mathematical expression evaluator supporting Reverse Polish Notation (RPN) and traditional infix notation.
-the evaluator uses a multi-stage processing pipeline:
+a stack-based mathematical expression evaluator supporting Reverse Polish Notation (RPN) and infix notation.
+uses a multi-stage processing pipeline:
 input -> tokenization -> expression conversion -> evaluation -> output
 
-## features
-### Reverse Polish Notation (RPN)
+supported features:
+Reverse Polish Notation (RPN):
+example: 1 1 + = 2
+infix notation:
+example: 1 + 1 = 2
+you can switch between modes by typing 'RPN' and 'INFIX' respectively.
 
-example:
-2 3 * 4 +
-result:
-10
+architecture:
+token-based processing.
+stack-based evaluation.
+separate tokenization and evaluation stages.
 
-### INFIX notation
+variables and memory:
 
-example:
-2 * 3 + 4
-result:
-10
-
-switch between modes with:
-INFIX
-RPN
-
-## architecture
-- token-based processing.
-- stack-based evaluation.
-- separate lexing, parsing and evaluation stages.
-- infix → RPN conversion. custom INFIX-to-RPN conversion algorithm (conceptually similar to Shunting Yard)
-
-## variables
-
-RPN:
+rpn:
 x 5 =
-
-INFIX:
+infix:
 x = 5
 
-memory:
-x = 5
+in memory: x = 5
 
-## supported operations
+basic operations:
++, -, *, /.
 
-binary:
-- '+'
-- '-'
-- '*'
-- '/'
-- '^'
+status: active development.
 
-unary:
-- unary '-'
-- 'sqrt'
-- square ('u^', RPN only)
-
-## status: done.
-the current version is feature-complete for the stack-based architecture.
+planned:
+parentheses for infix expressions.
+operators: ^, %.
+further architectural improvements.
 
 3. AST
 builds an abstract syntax tree before evaluation
-status: work in progress.
+status: planned.
