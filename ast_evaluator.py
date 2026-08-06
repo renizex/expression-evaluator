@@ -64,7 +64,7 @@ class VariableNode(Node):
 
 @dataclass
 class UnaryMinusNode(Node):
-    value: Number | Node
+    value: Node
 
 def main() -> None:
     print("AST evaluator")
@@ -105,7 +105,7 @@ def lex(expression: str) -> list[Token]:
 
 def parse(tokens: list[Token]) -> Node:
     parser = Parser(tokens)
-    tree = parser.parse_expression()
+    tree = parser.parse_assignment()
     return tree
 
 class Parser:
@@ -120,6 +120,14 @@ class Parser:
 
     def advance(self) -> None:
         self.current_index += 1
+
+    def parse_assignment(self) -> Node:
+        left = self.parse_expression()
+        while self.current_index < len(self.tokens) and self.current().value == '=':
+            self.advance()
+            right = self.parse_assignment()
+            left = BinaryOperatorNode(left, '=', right)
+        return left
 
     def parse_expression(self) -> Node:
         left = self.parse_term()
