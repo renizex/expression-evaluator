@@ -10,6 +10,9 @@ class InvalidLexemeError(InvalidExpressionError):
 
 Number: TypeAlias = int | float
 
+def unary_minus(a: Number) -> Number:
+    return -a
+
 @dataclass
 class Token:
     value: str
@@ -59,8 +62,13 @@ class NumberNode(Node):
 class VariableNode(Node):
     value: str
 
+@dataclass
+class UnaryMinusNode(Node):
+    value: Number | Node
+
 def main() -> None:
     print("AST evaluator")
+    print("currently there isn't an evaluator, so you'll just see AST instead")
     while True:
         try:
             expression = input("> ")
@@ -123,13 +131,20 @@ class Parser:
         return left
 
     def parse_term(self) -> Node:
-        left = self.parse_factor()
+        left = self.parse_unary()
         while self.current_index < len(self.tokens) and self.current().value in ['*', '/']:
             operator = self.current().value
             self.advance()
-            right = self.parse_factor()
+            right = self.parse_unary()
             left = BinaryOperatorNode(left, operator, right)
         return left
+
+    def parse_unary(self) -> Node:
+        if self.current().value == '-':
+            self.advance()
+            expression = self.parse_unary()
+            return UnaryMinusNode(expression)
+        return self.parse_factor()
 
     def parse_factor(self) -> Node:
         match self.current():
@@ -150,4 +165,5 @@ class Parser:
                 raise InvalidExpressionError("unmatched opening parenthesis")
         raise InvalidExpressionError("unexpected token")
 
-main()
+if __name__ == '__main__':
+    main()
