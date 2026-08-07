@@ -1,6 +1,7 @@
 import re
 from dataclasses import dataclass
-from typing import TypeAlias
+from typing import TypeAlias, NoReturn
+
 
 class InvalidExpressionError(Exception):
     pass
@@ -73,7 +74,7 @@ def main() -> None:
         try:
             expression = input("> ")
             tokens = lex(expression)
-            parsed = parse(tokens)
+            parsed = parse(tokens, expression)
             print(parsed)
         except InvalidExpressionError as msg:
             print(msg)
@@ -100,78 +101,131 @@ def lex(expression: str) -> list[Token]:
         elif match.group(4):
             pass
         elif match.group(5):
-            raise InvalidLexemeError(f"ERROR: unknown lexeme '{match.group(5)}' at position '{match.start()}'.")
+            raise InvalidLexemeError(f"ERROR: unknown lexeme '{match.group(5)}' at position {match.start()}.")
     return tokens
 
-def parse(tokens: list[Token]) -> Node:
-    parser = Parser(tokens)
+def parse(tokens: list[Token], expression: str) -> Node:
+    parser = Parser(tokens, expression)
     tree = parser.parse_assignment()
     return tree
 
 class Parser:
-    def __init__(self, tokens: list[Token]) -> None:
+    def __init__(self, tokens: list[Token], expression: str) -> None:
         self.tokens = tokens
+        self.expression = expression
         self.current_index = 0
 
-    def current(self) -> Token:
+    def is_valid_expression(self):
+        return self.current_index < len(self.tokens)
+
+    def current(self) -> Token | None:
+        #print(self.current_index, len(self.tokens))
         if self.current_index >= len(self.tokens):
-            raise InvalidExpressionError("invalid expression")
+            return None
         return self.tokens[self.current_index]
 
     def advance(self) -> None:
         self.current_index += 1
 
+    def error(self, message: str) -> NoReturn:
+        pointer = ' ' * self.current_index + '^' if self.current_index else '^'
+        raise InvalidExpressionError(
+            f"      {message}\n"
+            f"      {self.expression}\n"
+            f"      {pointer}"
+        )
+
+    def match(self, *values: str) -> bool:
+        current = self.current()
+        return current is not None and current.value in values
+
+    def consume(self, *values: str) -> str | None:
+        current = self.current()
+        if current is None:
+            return None
+        if current.value not in values:
+            return None
+        self.advance()
+        return current.value
+
+    def expect(self, *args) -> bool:
+        current = self.current()
+        if current is not None:
+            if current.value in args:
+                return True
+            self.error(f"ERROR: expected {args}, got {current.value}.")
+        return False
+
     def parse_assignment(self) -> Node:
         left = self.parse_expression()
-        while self.current_index < len(self.tokens) and self.current().value == '=':
-            self.advance()
+        while True:
+            operator = self.consume('=')
+            if operator is None:
+                break
+            if not isinstance(left, VariableNode):
+                self.error(f"ERROR: expected a variable, got '{left}'.")
             right = self.parse_assignment()
-            left = BinaryOperatorNode(left, '=', right)
+            left = BinaryOperatorNode(left, operator, right)
         return left
 
     def parse_expression(self) -> Node:
         left = self.parse_term()
-        while self.current_index < len(self.tokens) and self.current().value in ['+', '-']:
-            operator = self.current().value
-            self.advance()
+        while True:
+            operator = self.consume('+', '-')
+            if operator is None:
+                break
             right = self.parse_term()
             left = BinaryOperatorNode(left, operator, right)
         return left
 
     def parse_term(self) -> Node:
         left = self.parse_unary()
-        while self.current_index < len(self.tokens) and self.current().value in ['*', '/']:
-            operator = self.current().value
-            self.advance()
+        while True:
+            operator = self.consume('*', '/')
+            if operator is None:
+                break
             right = self.parse_unary()
             left = BinaryOperatorNode(left, operator, right)
         return left
 
     def parse_unary(self) -> Node:
-        if self.current().value == '-':
+        if self.match('-'):
             self.advance()
             expression = self.parse_unary()
             return UnaryMinusNode(expression)
-        return self.parse_factor()
+        return self.parse_power()
+
+    def parse_power(self) -> Node:
+        left = self.parse_factor()
+        while True:
+            operator = self.consume('^')
+            if operator is None:
+                break
+            right = self.parse_power()
+            left = BinaryOperatorNode(left, operator, right)
+        return left
 
     def parse_factor(self) -> Node:
-        match self.current():
+        current = self.current()
+        if current is None:
+            self.error(f"ERROR: unexpected end of expression.")
+        match current:
             case NumberToken():
-                number = NumberNode(self.current().value)
+                number = NumberNode(current.value)
                 self.advance()
                 return number
             case VariableToken():
-                variable = VariableNode(self.current().value)
+                variable = VariableNode(current.value)
                 self.advance()
                 return variable
             case OpeningParenthesisToken():
                 self.advance()
                 node = self.parse_expression()
-                if isinstance(self.current(), ClosingParenthesisToken):
+                if self.expect(')'):
                     self.advance()
                     return node
-                raise InvalidExpressionError("unmatched opening parenthesis")
-        raise InvalidExpressionError("unexpected token")
+                self.error(f"ERROR: expected closing parenthesis at position {self.current_index + 1}.")
+        self.error(f"ERROR: unexpected token '{current.value}' at position {self.current_index + 1}.")
 
 if __name__ == '__main__':
     main()
