@@ -10,6 +10,34 @@ class InvalidLexemeError(InvalidExpressionError):
     pass
 
 Number: TypeAlias = int | float
+Memory: TypeAlias = dict[str, Number]
+
+def plus(a: Number, b: Number) -> Number:
+    return a+b
+
+def minus(a: Number, b: Number) -> Number:
+    return a-b
+
+def multiply(a: Number, b: Number) -> Number:
+    return a*b
+
+def divide(a: Number, b: Number) -> Number:
+    if b == 0:
+        raise ZeroDivisionError("ERROR: division by zero")
+    return a/b
+
+def power(a: Number, b: Number) -> Number:
+    if a == 0 and b < 0:
+        raise ZeroDivisionError("ERROR: division by zero")
+    return a**b
+
+operations = {
+    '+': plus,
+    '-': minus,
+    '*': multiply,
+    '/': divide,
+    '^': power,
+}
 
 def unary_minus(a: Number) -> Number:
     return -a
@@ -67,17 +95,74 @@ class VariableNode(Node):
 class UnaryMinusNode(Node):
     value: Node
 
+@dataclass
+class AssignNode(Node):
+    variable: VariableNode
+    operator: str
+    right: Node
+
+def memory_show(memory: dict[str, Number]) -> str:
+    if not memory:
+        return "memory is empty"
+    return '\n'.join(f"{variable} = {number}" for variable, number in memory.items())
+
+def memory_clear(memory: dict[str, Number]) -> str:
+    memory.clear()
+    return "memory cleared"
+
+def help_show() -> str:
+    return """
+commands:
+    memory: show memory
+    clear: clear memory
+    help: show this
+        
+operators:
+    basic:
+        '+', '-', '*', '/' including unary minus
+    '^': power
+    '=': assign
+    '(', ')': parentheses
+    
+planned:
+    functions.
+    """.strip()
+
+memory_commands = {
+    "memory": memory_show,
+    "clear": memory_clear
+}
+
+help_commands = {
+    "help": help_show
+}
+
 def main() -> None:
+    memory: dict[str, Number] = {}
     print("AST evaluator")
-    print("currently there isn't an evaluator, so you'll just see AST instead")
+    print("enter 'help' for commands and operators")
     while True:
         try:
             expression = input("> ")
+            if is_command(expression, memory):
+                continue
             tokens = lex(expression)
-            parsed = parse(tokens, expression)
-            print(parsed)
+            node = parse(tokens, expression)
+            output = evaluate(node, memory)
+            if output is None:
+                continue
+            print(output)
         except InvalidExpressionError as msg:
             print(msg)
+
+def is_command(expression: str, memory: dict[str, Number]) -> bool | str:
+    if expression in memory_commands:
+        print(memory_commands[expression](memory))
+        return True
+    elif expression in help_commands:
+        print(help_commands[expression]())
+        return True
+    return False
 
 def lex(expression: str) -> list[Token]:
     tokens = []
@@ -157,16 +242,16 @@ class Parser:
         return False
 
     def parse_assignment(self) -> Node:
-        left = self.parse_expression()
+        variable = self.parse_expression()
         while True:
             operator = self.consume('=')
             if operator is None:
                 break
-            if not isinstance(left, VariableNode):
-                self.error(f"ERROR: expected a variable, got '{left}'.")
+            if not isinstance(variable, VariableNode):
+                self.error(f"ERROR: expected a variable, got '{variable}'.")
             right = self.parse_assignment()
-            left = BinaryOperatorNode(left, operator, right)
-        return left
+            variable = AssignNode(variable, operator, right)
+        return variable
 
     def parse_expression(self) -> Node:
         left = self.parse_term()
@@ -226,6 +311,43 @@ class Parser:
                     return node
                 self.error(f"ERROR: expected closing parenthesis at position {self.current_index + 1}.")
         self.error(f"ERROR: unexpected token '{current.value}' at position {self.current_index + 1}.")
+
+def evaluate(node: Node, memory: dict[str, Number]) -> Number | None:
+    match node:
+        case AssignNode():
+            return assign(node, memory)
+        case NumberNode() | VariableNode():
+            return resolve_operand(node, memory)
+        case UnaryMinusNode():
+            value = evaluate(node.value, memory)
+            if value is None:
+                raise InvalidExpressionError(f"ERROR: expected number, got type None.")
+            return unary_minus(value)
+        case BinaryOperatorNode():
+            left = evaluate(node.left, memory)
+            right = evaluate(node.right, memory)
+            if left is None or right is None:
+                raise InvalidExpressionError(f"ERROR: operator '{node.operator}' requires two valid numbers, got {type(left).__name__} and {type(right).__name__}.")
+            return operations[node.operator](left, right)
+    raise InvalidExpressionError("ERROR: unsupported AST node.")
+
+def assign(node: AssignNode, memory: dict[str, Number]) -> Number:
+    value = evaluate(node.right, memory)
+    if value is None:
+        raise InvalidExpressionError(f"ERROR: unexpected None type.")
+    memory[node.variable.value] = value
+    return value
+
+def resolve_operand(node: Node, memory: Memory) -> Number:
+    match node:
+        case NumberNode():
+            return node.value
+        case VariableNode(variable):
+            if variable in memory:
+                return memory[variable]
+            raise InvalidExpressionError(f"ERROR: variable '{variable}' does not exist.")
+        case _:
+            raise InvalidExpressionError(f"ERROR: can't resolve operand for type '{type(node).__name__}'.")
 
 if __name__ == '__main__':
     main()
