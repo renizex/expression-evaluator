@@ -2,7 +2,6 @@ import re
 from dataclasses import dataclass
 from typing import TypeAlias, NoReturn
 
-
 class InvalidExpressionError(Exception):
     pass
 
@@ -147,6 +146,12 @@ class BlockNode(Node):
 
 @dataclass
 class IfNode(Node):
+    condition: Node
+    body: BlockNode
+    else_body: BlockNode | None
+
+@dataclass
+class WhileNode(Node):
     condition: Node
     body: BlockNode
     else_body: BlockNode | None
@@ -336,6 +341,9 @@ class Parser:
             case IfToken():
                 self.advance()
                 return self.parse_if_statement()
+            case WhileToken():
+                self.advance()
+                return self.parse_while_statement()
             case _:
                 return self.parse_assignment()
 
@@ -346,6 +354,14 @@ class Parser:
             return IfNode(condition, body, None)
         else_body = self.parse_block()
         return IfNode(condition, body, else_body)
+
+    def parse_while_statement(self) -> Node:
+        condition = self.parse_expression()
+        body = self.parse_block()
+        if self.consume('else') is None:
+            return WhileNode(condition, body, None)
+        else_body = self.parse_block()
+        return WhileNode(condition, body, else_body)
 
     def parse_block(self) -> BlockNode:
         block: list[Node] = []
@@ -469,6 +485,15 @@ def evaluate(node: Node, memory: dict[str, Number]) -> Number | None:
                     return evaluate(node.else_body, memory)
                 return None
             return evaluate(node.body, memory)
+        case WhileNode():
+            result = None
+            while evaluate(node.condition, memory):
+                result = evaluate(node.body, memory)
+            if not evaluate(node.condition, memory):
+                if node.else_body is not None:
+                    return evaluate(node.else_body, memory)
+                return None
+            return result
         case BlockNode():
             result = None
             for block in node.block:
